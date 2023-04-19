@@ -2,14 +2,18 @@
 using Utilities = Aveva.Core.Utilities;
 using Aveva.Core.Utilities.Messaging;
 using System;
-using System.Configuration;
 using System.IO;
 using Stand = Aveva.Core3D.Standalone;
+using System.Collections;
+using System.Xml;
 
 namespace SelfExpunge.Standalone
 {
     internal class Program
     {
+        public static string SettingsPath { get; set; } = @"xxx\SelfExpungeApp.config";
+
+        public static Hashtable Settings { get; set; } = new Hashtable(); 
         public static string ProjectName { get; set; }
         public static string User { get; set; } = "SYSTEM";
         public static string Password { get; set; } = "XXXXXX";
@@ -69,18 +73,17 @@ namespace SelfExpunge.Standalone
 
                         Log.Write(file.ToString() + "\n" + "Options:");
                         Log.Write
-                            ($"ProjectName: {ProjectName} \n"
-                            + $"MdbName: {MdbName} \n"
-                            + $"UniqeId: {UniqeId} \n" +
-                            $"Status: {Status} \n");
+                            ($"\tProjectName: {ProjectName} \n"
+                            + $"\tMdbName: {MdbName} \n"
+                            + $"\tUniqeId: {UniqeId} \n" +
+                            $"\tStatus: {Status} \n");
 
 
                         if (Status == false)
                         {
                             if (ConnectToProgram(ProjectName, User, Password, MdbName))
                             {
-                                Log.Write("---------------------Done------------------------");
-                                Console.WriteLine("---------------------Done------------------------");
+                                
                                 File.Delete(file);
                             }
                         }
@@ -92,11 +95,72 @@ namespace SelfExpunge.Standalone
 
         private static void Init()
         {
-            var logDirectory = ConfigurationManager.AppSettings["LOGPATH"];
+            if (GetSettings(SettingsPath) == false)
+            {
+                Console.WriteLine("Please control your SelfExpungeApp.config");
+            }
+            var logDirectory = Settings["LOGPATH"].ToString();
             Log log = new Log(logDirectory);
-            TaskFileDirectory = ConfigurationManager.AppSettings["TASKFILEPATH"];
-            User = ConfigurationManager.AppSettings["USER"];
-            Password = ConfigurationManager.AppSettings["PASSWORD"];
+            TaskFileDirectory = Settings["TASKFILEPATH"].ToString();
+            User = Settings["USER"].ToString();
+            Password = Settings["PASSWORD"].ToString();
+        }
+
+        private static bool GetSettings(string settingsPath)
+        {
+            
+            string xml = string.Empty;
+            StreamReader reader = null;
+            try
+            {
+                reader = new StreamReader(new FileStream(
+                                                   settingsPath,
+                                                   FileMode.Open,
+                                                   FileAccess.Read,
+                                                   FileShare.Read));
+
+                xml = reader.ReadToEnd();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+                return false;
+            }
+            finally
+            {
+                reader.Close();
+                
+            }
+            
+            
+            XmlDocument xmlDocument = new XmlDocument();
+            xmlDocument.LoadXml(xml);
+            foreach (XmlNode child in xmlDocument.ChildNodes)
+            {
+                var name = child.Name;
+                if (child.Name.ToLower().Contains("config"))
+                {
+                    foreach (XmlNode config in child.ChildNodes)
+                    {
+                        if (config.Name.ToLower().Contains("setting"))
+                        {
+                            foreach (XmlNode setting in config.ChildNodes)
+                            {
+                                if (setting.Name.ToLower().Contains("add"))
+                                {
+                                    Settings.Add(
+                                        setting.Attributes["key"].Value,
+                                        setting.Attributes["value"].Value
+                                        );
+                                }
+                            }
+                        }
+                    }
+
+                }
+
+            }
+            return true;
         }
 
         static bool ConnectToProgram(string projectName, string user, string password, string mdbName)
@@ -108,8 +172,7 @@ namespace SelfExpunge.Standalone
                 if (!Stand.Standalone.Open(projectName, user, password, mdbName, out error))
                 {
                     var message = error.MessageText();
-                    Log.Write($"Error: {message}");
-                    Log.Write("-----------------------------------------------");
+                    Log.StatusFailed(message);
                     return false;
                 }
                 else
@@ -123,9 +186,8 @@ namespace SelfExpunge.Standalone
                     }
                     catch (Exception ex)
                     {
-                        Log.Write(ex.Message);
-                        Console.WriteLine(ex.Message);
-                        Log.Write("-----------------------------------------------");
+                        Log.StatusFailed(ex.Message);
+                        return false;
                     }
                     
   
@@ -135,17 +197,16 @@ namespace SelfExpunge.Standalone
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error : {ex.Message}");
-                Log.Write(ex.Message);
-                Log.Write("-----------------------------------------------");
+                Log.StatusFailed(ex.Message);
+                
             }
             finally
             {
                 MDB.CurrentMDB.CloseMDB();
                 Project.CurrentProject.Close();
             }
+            Log.Status();
             
-            Log.Write("-----------------------------------------------");
             return true;
         }
     }

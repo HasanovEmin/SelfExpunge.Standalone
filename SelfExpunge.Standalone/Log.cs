@@ -62,5 +62,22 @@ namespace SelfExpunge.Standalone
 
 
         }
+
+        internal static void StatusFailed(string message)
+        {
+            Console.WriteLine($"Error : {message}");
+            Log.Write(message);
+            Console.WriteLine(message);
+            Log.Write("\t\tTicket Status = Failed");
+            Console.WriteLine("\t\tTicket Status = Failed");
+            Log.Write("-----------------------------------------------");
+        }
+
+        internal static void Status()
+        {
+            Log.Write("\t\tTicket Status = Done");
+            Console.WriteLine("\t\tTicket Status = Done");
+            Log.Write("-----------------------------------------------");
+        }
     }
 }
